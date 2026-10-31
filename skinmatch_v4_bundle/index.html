@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SkinMatch – วิเคราะห์ผิวด้วย AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  window.tailwind = window.tailwind || {};
+  window.tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          brand: {
+            50: '#f0fdfa',
+            100: '#ccfbf1',
+            500: '#12727A',
+            600: '#0e5c63',
+            700: '#0a464b',
+          }
+        },
+        fontFamily: {
+          prompt: ['Prompt', 'sans-serif'],
+          thai: ['Noto Sans Thai', 'sans-serif'],
+          sans: ['Noto Sans Thai', 'Prompt', 'sans-serif']
+        }
+      }
+    }
+  };
+</script>
+<link rel="stylesheet" href="skinmatch.css">
+</head>
+<body>
+
+<header class="header-nav" id="headerNav" hidden>
+  <div class="nav-container">
+    <div class="flex items-center gap-2">
+      <div class="logo cursor-pointer" onclick="go('profile')">SkinMatch</div>
+      <span id="adminBadge" class="hidden text-[10px] bg-red-500 text-white font-bold px-1.5 py-0.5 rounded">ADMIN</span>
+    </div>
+    <div class="nav-links" id="navButtons"><!-- Navigation Loaded Via JS --></div>
+    <div class="mobile-menu-wrap">
+      <button class="mobile-menu-toggle" id="mobileMenuToggle" onclick="toggleMobileMenu()" aria-label="เปิดเมนู" aria-expanded="false">☰</button>
+      <div class="mobile-menu-panel" id="mobileMenuPanel">
+        <div id="mobileNavButtons"></div>
+        <button class="mobile-theme-btn" onclick="toggleTheme();closeMobileMenu()"><span id="mobileThemeIcon">🌙</span> เปลี่ยนโหมด Day / Night</button>
+      </div>
+    </div>
+    <button class="desktop-theme-btn btn alt sm !p-2 !min-w-[36px]" onclick="toggleTheme()" title="สลับโหมด มืด/สว่าง"><span id="themeIcon">🌙</span></button>
+  </div>
+</header>
+
+<div id="app"></div>
+
+<!-- Modal Dialog Container -->
+<div id="modalOverlay" class="fixed inset-0 bg-black/60 z-[200] hidden flex items-center justify-center p-4">
+  <div class="bg-[var(--sf)] rounded-2xl p-5 max-w-md w-full border border-[var(--line)] shadow-2xl relative">
+    <button onclick="closeModal()" class="absolute top-3 right-3 text-lg font-bold mute hover:text-[var(--ink)]">✕</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<script>
+// --- GLOBAL DATA CATALOG ---
+const CON = {
+  acne: ['สิว', '#E5484D'],
+  pores: ['รูขุมขนกว้าง', '#E8A317'],
+  dark_spots: ['จุดด่างดำ', '#8E5BD6'],
+  redness: ['รอยแดง', '#FF6B9A'],
+  dryness: ['ความแห้งกร้าน', '#3E9BFF'],
+  oil: ['ความมันส่วนเกิน', '#20B26B']
+};
+
+const TYPES = { oily: 'ผิวมัน', dry: 'ผิวแห้ง', combo: 'ผิวผสม', normal: 'ผิวธรรมดา' };
+
+// Products Catalog
+const PRODUCTS = [
+  { 
+    id: 1, 
+    t: 'CeraVe Foaming Facial Cleanser', 
+    b: 'CeraVe', 
+    c: 'โฟมล้างหน้า', 
+    p: 490, 
+    ml: 236, 
+    types: ['oily', 'combo', 'normal'], 
+    tags: ['oil', 'pores', 'acne'], 
+    ing: ['Ceramides', 'Niacinamide', 'Hyaluronic Acid'], 
+    img: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&q=80', 
+    url: 'https://www.lazada.co.th/catalog/?q=CeraVe+Foaming+Facial+Cleanser' 
+  },
+  { 
+    id: 2, 
+    t: 'La Roche-Posay Effaclar Duo+M', 
+    b: 'La Roche-Posay', 
+    c: 'สกินแคร์', 
+    p: 990, 
+    ml: 40, 
+    types: ['oily', 'combo'], 
+    tags: ['acne', 'redness', 'pores'], 
+    ing: ['Phylobioma', 'Niacinamide', 'LHA', 'Salicylic Acid', 'Alcohol'], 
+    img: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=400&q=80', 
+    url: 'https://www.shopee.co.th/search?keyword=La+Roche-Posay+Effaclar+Duo' 
+  },
+  { 
+    id: 3, 
+    t: 'The Ordinary Niacinamide 10% + Zinc 1%', 
+    b: 'The Ordinary', 
+    c: 'สกินแคร์', 
+    p: 350, 
+    ml: 30, 
+    types: ['oily', 'combo', 'normal'], 
+    tags: ['dark_spots', 'pores', 'oil'], 
+    ing: ['Niacinamide 10%', 'Zinc PCA 1%'], 
+    img: 'https://images.unsplash.com/photo-1608248597260-657d6543bc22?w=400&q=80', 
+    url: 'https://www.lazada.co.th/catalog/?q=The+Ordinary+Niacinamide' 
+  },
+  { 
+    id: 4, 
+    t: 'COSRX Advanced Snail 96 Mucin Essence', 
+    b: 'COSRX', 
+    c: 'สกินแคร์', 
+    p: 580, 
+    ml: 100, 
+    types: ['dry', 'normal', 'combo'], 
+    tags: ['dryness', 'redness'], 
+    ing: ['Snail Secretion Filtrate 96%', 'Sodium Hyaluronate'], 
+    img: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=400&q=80', 
+    url: 'https://shopee.co.th/search?keyword=COSRX+Snail+96' 
+  },
+  { 
+    id: 5, 
+    t: 'Cetaphil Gentle Skin Cleanser', 
+    b: 'Cetaphil', 
+    c: 'โฟมล้างหน้า', 
+    p: 389, 
+    ml: 250, 
+    types: ['dry', 'normal'], 
+    tags: ['dryness', 'redness'], 
+    ing: ['Glycerin', 'Niacinamide', 'Panthenol'], 
+    img: 'https://images.unsplash.com/photo-1567928257400-f13784936351?w=400&q=80', 
+    url: 'https://www.lazada.co.th/catalog/?q=Cetaphil+Gentle+Skin+Cleanser' 
+  },
+  { 
+    id: 6, 
+    t: 'Anessa Perfect UV Sunscreen Skincare Milk SPF50+', 
+    b: 'Anessa', 
+    c: 'กันแดด', 
+    p: 950, 
+    ml: 60, 
+    types: ['oily', 'combo', 'normal', 'dry'], 
+    tags: ['dark_spots', 'redness'], 
+    ing: ['Zinc Oxide', 'Titanium Dioxide', 'Alcohol', 'Fragrance'], 
+    img: 'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?w=400&q=80', 
+    url: 'https://shopee.co.th/search?keyword=Anessa+Perfect+UV' 
+  }
+];
+
+// App Global State
+const S = {
+  user: { email: 'user@example.com', name: 'User' },
+  isAdmin: false,
+  theme: 'light',
+  view: 'profile', // Default page is Profile/Home
+  isProfileEditing: false, // Readonly profile state toggle
+  img: null,
+  res: null,
+  hist: [
+    { id: '1', dateStr: '15 ก.ค.', time: Date.now() - 60*86400000, s: 61, type: 'oily', n: ['acne','oil','pores'], thumb: null },
+    { id: '2', dateStr: '12 ส.ค.', time: Date.now() - 20*86400000, s: 68, type: 'oily', n: ['oil','pores'], thumb: null },
+    { id: '3', dateStr: '10 ก.ย.', time: Date.now() - 5*86400000, s: 74, type: 'combo', n: ['pores','dark_spots'], thumb: null }
+  ],
+  baselineScanId: '1',
+  favs: new Set([1, 3]),
+  myCabinet: new Set(), // auto-populated after a product is purchased more than once
+  purchaseCounts: {},
+  cmp: new Set(), // Compare set for Shop comparison
+  cat: 'ทั้งหมด',
+  sort: 'match',
+  on: new Set(Object.keys(CON)),
+  msg: '',
+  busy: false,
+  showCmpTable: false,
+  
+  profile: {
+    age: '25',
+    skinType: 'combo',
+    concern: 'acne',
+    allergies: ['Alcohol', 'Fragrance'],
+    notes: 'แพ้น้ำหอม ผิวระคายเคืองง่าย'
+  },
+  
+  checkProd: { title: '', ingredients: '', category: 'สกินแคร์', result: null },
+  
+  shelfComp: {
+    count: 2,
+    items: [
+      { name: 'ขนาดปกติ (ขวดเล็ก)', price: 350, volume: 50, promo: 'none', promoVal: 0 },
+      { name: 'ขนาดรีฟิล / โปร 1แถม1', price: 620, volume: 50, promo: 'buy1get1', promoVal: 0 }
+    ],
+    result: null
+  }
+};
+
+const $ = q => document.querySelector(q);
+const app = $('#app');
+
+// Horizontal mouse wheel scrolling for PC Navbar
+window.addEventListener('DOMContentLoaded', () => {
+  const navContainer = document.getElementById('navButtons');
+  if (navContainer) {
+    navContainer.addEventListener('wheel', (e) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        navContainer.scrollLeft += e.deltaY;
+      }
+    }, { passive: false });
+  }
+});
+
+function toggleTheme() {
+  S.theme = S.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.classList.toggle('dark', S.theme === 'dark');
+  const icon = S.theme === 'dark' ? '☀️' : '🌙';
+  if ($('#themeIcon')) $('#themeIcon').textContent = icon;
+  if ($('#mobileThemeIcon')) $('#mobileThemeIcon').textContent = icon;
+}
+
+function toggleMobileMenu() {
+  const panel = $('#mobileMenuPanel');
+  const btn = $('#mobileMenuToggle');
+  if (!panel || !btn) return;
+  const open = panel.classList.toggle('open');
+  btn.setAttribute('aria-expanded', String(open));
+  btn.textContent = open ? '✕' : '☰';
+}
+function closeMobileMenu() {
+  const panel = $('#mobileMenuPanel');
+  const btn = $('#mobileMenuToggle');
+  if (panel) panel.classList.remove('open');
+  if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.textContent = '☰'; }
+}
+
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.mobile-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) closeMobileMenu();
+});
+
+function go(v) {
+  if (v !== 'scan' && activeCameraStream) stopCamera();
+  S.view = v;
+  S.msg = '';
+  S.showCmpTable = false;
+  closeMobileMenu();
+  render();
+  window.scrollTo(0, 0);
+}
+
+function nav() {
+  const h = $('#headerNav');
+  h.hidden = !S.user;
+  if (!S.user) return;
+  const t = [
+    ['profile', '👤 โปรไฟล์'], ['scan', '📷 วิเคราะห์ผิว'], ['shop', '🛍️ สินค้าแนะนำ'],
+    ['check', '🔍 ซื้อดีไหม'], ['shelf', '🏷️ เทียบราคา'], ['hist', '📊 ประวัติ & ภาพ']
+  ];
+  $('#adminBadge').classList.toggle('hidden', !S.isAdmin);
+  const markup = t.map(([k, l]) => `<button class="${(S.view === k || (k === 'scan' && S.view === 'result')) ? 'on' : ''}" onclick="go('${k}')">${l}</button>`).join('');
+  $('#navButtons').innerHTML = markup;
+  $('#mobileNavButtons').innerHTML = markup;
+  const icon = S.theme === 'dark' ? '☀️' : '🌙';
+  $('#themeIcon').textContent = icon;
+  $('#mobileThemeIcon').textContent = icon;
+}
+
+function render() {
+  nav();
+  const views = { 
+    auth: vAuth, 
+    profile: vProfile, 
+    scan: vScan, 
+    result: vResult, 
+    check: vCheck,
+    shelf: vShelf,
+    shop: vShop, 
+    hist: vHist
+  };
+  if (views[S.view]) views[S.view]();
+  if (S.view === 'result') setTimeout(drawRes, 50);
+}
+
+/* Modal System */
+function openModal(html) {
+  $('#modalContent').innerHTML = html;
+  $('#modalOverlay').classList.remove('hidden');
+}
+function closeModal() {
+  $('#modalOverlay').classList.add('hidden');
+}
+
+/* ---- AUTH VIEW ---- */
+function vAuth() {
+  app.innerHTML = `
+    <div style="max-width:440px;margin:30px auto 0">
+      <div class="text-center mb-6">
+        <div class="logo" style="font-size:32px">SkinMatch</div>
+        <p class="mute mt-1">วิเคราะห์ผิวด้วย AI แนะนำสกินแคร์ที่ใช่ ปลอดภัย ไม่แพ้</p>
+      </div>
+
+      <div class="card">
+        <h2 class="mb-4">เข้าสู่ระบบ / สมัครสมาชิก</h2>
+        <label class="text-xs mute block mb-1">อีเมล</label>
+        <input id="em" type="email" placeholder="อีเมลของคุณ (ใช้ admin@gmail.com เพื่อเข้าโหมด Admin)" autocomplete="email" value="user@example.com">
+        <label class="text-xs mute block mb-1">รหัสผ่าน</label>
+        <input id="pw" type="password" placeholder="รหัสผ่าน (อย่างน้อย 6 ตัวอัศร)" value="123456">
+        
+        ${S.msg ? `<p class="err" id="er">${S.msg}</p>` : ''}
+        
+        <div class="row mt-2">
+          <button class="btn" onclick="login()">เข้าสู่ระบบ</button>
+          <button class="btn alt" onclick="login(true)">สมัครสมาชิก</button>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-[var(--line)] text-center text-xs mute">
+          <p>ทดลองเข้าใช้งาน Admin: <b class="text-[var(--brand)] cursor-pointer" onclick="$('#em').value='admin@gmail.com';login()">admin@gmail.com</b></p>
+        </div>
+      </div>
+    </div>`;
+}
+
+function login(isSignup = false) {
+  const e = $('#em').value.trim();
+  const p = $('#pw').value;
+  if (!/^\S+@\S+\.\S+$/.test(e)) {
+    S.msg = 'รูปแบบอีเมลไม่ถูกต้อง';
+    return vAuth();
+  }
+  if (p.length < 6) {
+    S.msg = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+    return vAuth();
+  }
+  
+  S.user = { email: e, name: e.split('@')[0] };
+  S.isAdmin = (e.toLowerCase() === 'admin@gmail.com');
+  go('profile');
+}
+
+/* ---- PROFILE / HOME (REORGANIZED AS LANDING) ---- */
+function vProfile() {
+  const pf = S.profile;
+  const l = S.hist[S.hist.length - 1];
+  const favList = PRODUCTS.filter(p => S.favs.has(p.id));
+  const cabList = PRODUCTS.filter(p => S.myCabinet.has(p.id));
+
+  app.innerHTML = `
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h1>สวัสดี, ${S.user.name} 👋</h1>
+        <p class="mute text-xs">ยินดีต้อนรับสู่โปรไฟล์และแดชบอร์ดดูแลผิวของคุณ</p>
+      </div>
+      <button class="btn alt sm" onclick="S.user=null;go('auth')">ออกจากระบบ</button>
+    </div>
+
+    ${checkAllergyCabinetWarning()}
+
+    <div class="g2">
+      <!-- Left Column: Recent Skin Score + Profile Information (Read-only / Edit Toggle) -->
+      <div class="space-y-4">
+        <div class="card highlight">
+          <div class="flex justify-between items-start">
+            <div>
+              <span class="badge badge-top mb-2">คะแนนผิวล่าสุด</span>
+              <div class="score">${l ? l.s : 0}<span class="mute text-lg"> / 100</span></div>
+              <p class="font-medium mt-1 text-sm">${l ? TYPES[l.type] : ''} · ${l ? l.dateStr : ''}</p>
+            </div>
+            <button class="btn sm" onclick="go('scan')">📷 วิเคราะห์ใหม่</button>
+          </div>
+          <div class="bar mt-3"><i style="width:${l ? l.s : 0}%"></i></div>
+        </div>
+
+        <div class="card">
+          <div class="flex justify-between items-center mb-3">
+            <h3>👤 ข้อมูลส่วนตัว & สารแพ้</h3>
+            ${!S.isProfileEditing ? `
+              <button class="btn alt sm !py-1" onclick="S.isProfileEditing=true;vProfile()">✏️ แก้ไขข้อมูลโปรไฟล์</button>
+            ` : `
+              <button class="btn sm !py-1" onclick="saveProfileChanges()">💾 บันทึกการแก้ไข</button>
+            `}
+          </div>
+
+          ${!S.isProfileEditing ? `
+            <!-- READONLY VIEW (Prevents Accidental Taps) -->
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between py-1 border-b border-[var(--line)]">
+                <span class="mute">อายุ:</span>
+                <span class="font-semibold">${pf.age} ปี</span>
+              </div>
+              <div class="flex justify-between py-1 border-b border-[var(--line)]">
+                <span class="mute">ประเภทผิว:</span>
+                <span class="font-semibold">${TYPES[pf.skinType]}</span>
+              </div>
+              <div class="flex justify-between py-1 border-b border-[var(--line)]">
+                <span class="mute">ข้อกังวลหลัก:</span>
+                <span class="font-semibold">${CON[pf.concern] ? CON[pf.concern][0] : pf.concern}</span>
+              </div>
+              <div class="py-1">
+                <span class="mute block mb-1">ส่วนผสมที่คุณแพ้:</span>
+                <div class="flex flex-wrap gap-1">
+                  ${pf.allergies.length ? pf.allergies.map(a => `<span class="chip font-medium text-red-500 border-red-200 bg-red-50 !mb-1">🚫 ${a}</span>`).join('') : '<span class="mute text-xs">ไม่ได้ระบุ</span>'}
+                </div>
+              </div>
+            </div>
+          ` : `
+            <!-- EDITABLE VIEW -->
+            <div class="space-y-3">
+              <div>
+                <label class="text-xs mute block mb-1">อายุ</label>
+                <input type="number" id="pfAge" value="${pf.age}">
+              </div>
+              <div>
+                <label class="text-xs mute block mb-1">ประเภทผิว</label>
+                <select id="pfType">
+                  ${Object.entries(TYPES).map(([k, v]) => `<option value="${k}" ${pf.skinType === k ? 'selected' : ''}>${v}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="text-xs mute block mb-1">ข้อกังวลผิวหลัก</label>
+                <select id="pfConcern">
+                  ${Object.entries(CON).map(([k, v]) => `<option value="${k}" ${pf.concern === k ? 'selected' : ''}>${v[0]}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="text-xs mute block mb-1">ระบุสารแพ้ (คั่นด้วยเครื่องหมาย ,)</label>
+                <input id="pfAllergies" value="${pf.allergies.join(', ')}">
+              </div>
+            </div>
+          `}
+        </div>
+
+        <div class="card border-red-300 bg-red-50/50 dark:bg-red-950/20">
+          <h3 class="text-red-600 dark:text-red-400 mb-2">🩹 คำแนะนำเบื้องต้นเมื่อเกิดอาการแพ้</h3>
+          <ol class="text-xs text-red-800 dark:text-red-200 space-y-1.5 list-decimal pl-4">
+            <li><b>หยุดใช้ทันที:</b> หยุดใช้สกินแคร์ต้องสงสัยทันที</li>
+            <li><b>ล้างออกด้วยน้ำสะอาด:</b> ไม่ขัดถูแรง</li>
+            <li><b>ประคบเย็น:</b> ใช้ผ้าสะอาดห่อเจลเย็นประคบบริเวณแสบแดง</li>
+            <li><b>งดผลัดเซลล์ผิว:</b> งดใช้ AHA/BHA/Retinol ชั่วคราว</li>
+            <li><b>พบแพทย์:</b> หากมีรอยบวม หรือบวมแดงตึง ให้รีบพบแพทย์ผิวหนัง</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- Right Column: My Cabinet (Frequently Used) & Favorites -->
+      <div class="space-y-4">
+        <!-- CABINET (FREQUENTLY USED) -->
+        <div class="card">
+          <div class="flex justify-between items-center mb-2">
+            <h3>⭐ สินค้าที่ใช้บ่อย (My Cabinet)</h3>
+            <span class="text-xs mute">${cabList.length} รายการ</span>
+          </div>
+          <p class="mute text-xs mb-3">ระบบติดตามสินค้าที่ซื้อซ้ำและเฝ้าระวังส่วนผสมที่อาจแพ้โดยอัตโนมัติ</p>
+
+          ${cabList.length ? `
+            <div class="space-y-2">
+              ${cabList.map(p => {
+                const hasAllergy = p.ing.some(i => pf.allergies.some(a => i.toLowerCase().includes(a.toLowerCase())));
+                return `
+                  <div class="flex items-center justify-between p-2 border border-[var(--line)] rounded-xl bg-[var(--sf)]">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <img src="${p.img}" class="w-10 h-10 object-contain rounded bg-white flex-shrink-0">
+                      <div class="min-w-0">
+                        <div class="font-semibold text-xs truncate">${p.t}</div>
+                        <div class="text-[11px] mute">฿${p.p} ${hasAllergy ? '<span class="text-red-500 font-bold ml-1">⚠️ มีส่วนผสมที่แพ้</span>' : ''}</div>
+                      </div>
+                    </div>
+                    <button class="btn sm !py-1 !px-3 font-normal text-xs ml-2 flex-shrink-0" onclick="buyProduct(${p.id})">ซื้ออีกครั้ง</button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          ` : '<p class="mute text-xs py-2 text-center">ยังไม่มีสินค้าใช้บ่อย สินค้าจะปรากฏที่นี่เมื่อมีการกดไปซื้อซ้ำอย่างน้อย 2 ครั้ง</p>'}
+        </div>
+
+        <!-- FAVORITES -->
+        <div class="card">
+          <div class="flex justify-between items-center mb-2">
+            <h3>❤️ รายการโปรดที่บันทึกไว้</h3>
+            <span class="text-xs mute">${favList.length} รายการ</span>
+          </div>
+
+          ${favList.length ? `
+            <div class="space-y-2">
+              ${favList.map(p => `
+                <div class="flex items-center justify-between p-2 border border-[var(--line)] rounded-xl bg-[var(--sf)]">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <img src="${p.img}" class="w-10 h-10 object-contain rounded bg-white flex-shrink-0">
+                    <div class="min-w-0">
+                      <div class="font-semibold text-xs truncate">${p.t}</div>
+                      <div class="text-[11px] mute">${p.b} · ฿${p.p}</div>
+                    </div>
+                  </div>
+                  <button class="btn sm alt !py-1 !px-3 text-xs ml-2 flex-shrink-0" onclick="buyProduct(${p.id})">ไปที่ร้านค้า</button>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<p class="mute text-xs py-2 text-center">ยังไม่มีรายการโปรด (กด ❤️ ในหน้าสินค้าเพื่อบันทึก)</p>'}
+        </div>
+      </div>
+    </div>`;
+}
+
+function saveProfileChanges() {
+  S.profile.age = $('#pfAge').value;
+  S.profile.skinType = $('#pfType').value;
+  S.profile.concern = $('#pfConcern').value;
+  S.profile.allergies = $('#pfAllergies').value.split(',').map(s => s.trim()).filter(Boolean);
+  S.isProfileEditing = false;
+  vProfile();
+}
+
+function checkAllergyCabinetWarning() {
+  const allergyHits = [];
+  S.myCabinet.forEach(id => {
+    const p = PRODUCTS.find(x => x.id === id);
+    if (p) {
+      const matchAllergy = p.ing.filter(i => S.profile.allergies.some(a => i.toLowerCase().includes(a.toLowerCase())));
+      if (matchAllergy.length) allergyHits.push({ prod: p.t, ing: matchAllergy });
+    }
+  });
+
+  if (!allergyHits.length) return '';
+  return `
+    <div class="card border-red-400 bg-red-50 dark:bg-red-950/30 mb-4">
+      <h3 class="text-red-600 dark:text-red-400 flex items-center gap-2 text-sm">⚠️ คำเตือน: สกินแคร์ที่ใช้อยู่มีสารแพ้!</h3>
+      <ul class="text-xs text-red-700 dark:text-red-300 mt-1 space-y-1 list-disc pl-4">
+        ${allergyHits.map(h => `<li><b>${h.prod}</b> มีสารที่คุณแพ้: ${h.ing.join(', ')}</li>`).join('')}
+      </ul>
+    </div>`;
+}
+
+/* ---- SCAN VIEW & CANVAS SCANNER ---- */
+function vScan() {
+  app.innerHTML = `
+    <h1>วิเคราะห์ผิวหน้าด้วย AI</h1>
+    <p class="mute mb-4 text-xs">ถ่ายภาพในที่สว่างสม่ำเสมอ หันหน้าตรง ไม่สวมแว่นตา</p>
+    
+    <div class="card max-w-lg mx-auto text-center">
+      ${S.msg ? `<p class="err">${S.msg}</p>` : ''}
+      <input id="cam" type="file" accept="image/*" capture="user" hidden onchange="pickImage(this)">
+      <input id="gal" type="file" accept="image/*" hidden onchange="pickImage(this)">
+      <video id="liveCamera" class="camera-preview" autoplay playsinline muted hidden></video>
+      <canvas id="cameraCaptureCanvas" hidden></canvas>
+      
+      ${S.busy ? `
+        <h3 class="mb-3">AI กำลังวิเคราะห์ใบหน้าและโครงสร้างผิว…</h3>
+        <div class="pulse mb-2"><i id="pg"></i></div>
+      ` : `
+        <div class="camera-stage" id="cameraStage">
+          <div class="camera-placeholder-art" aria-hidden="true"><div class="face-outline"><span></span><i></i></div><div class="camera-corner c1"></div><div class="camera-corner c2"></div><div class="camera-corner c3"></div><div class="camera-corner c4"></div></div>
+          <p class="text-sm font-semibold mt-3">จัดใบหน้าให้อยู่ในกรอบ</p>
+          <p class="mute text-xs">ถ่ายในที่สว่างสม่ำเสมอ หันหน้าตรง และไม่สวมแว่นตา</p>
+          <p class="camera-hint">ภาพตัวอย่าง UI · กล้องจริงจะเปิดเมื่ออนุญาตการใช้งาน</p>
+        </div>
+        <div class="row camera-actions">
+          <button class="btn" onclick="startCamera()">📸 เปิดกล้อง</button>
+          <button class="btn alt" onclick="$('#gal').click()">🖼️ เลือกจากคลังภาพ</button>
+        </div>
+        <div class="row camera-live-actions" id="cameraLiveActions" hidden>
+          <button class="btn" onclick="captureCamera()">ถ่ายภาพ</button>
+          <button class="btn alt" onclick="stopCamera()">ปิดกล้อง</button>
+        </div>
+        <button class="btn alt mt-2" onclick="analyzeSkin(demoFaceCanvas())">✨ ลองด้วยภาพตัวอย่างระบบ</button>
+      `}
+    </div>`;
+
+  if (S.busy) {
+    requestAnimationFrame(() => {
+      const p = $('#pg');
+      if (p) p.style.width = '100%';
+    });
+  }
+}
+
+let activeCameraStream = null;
+async function startCamera() {
+  const video = $('#liveCamera');
+  const stage = $('#cameraStage');
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('unsupported');
+    activeCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    video.srcObject = activeCameraStream;
+    video.hidden = false;
+    if (stage) stage.hidden = true;
+    $('#cameraLiveActions').hidden = false;
+    document.querySelector('.camera-actions').hidden = true;
+    await video.play();
+  } catch (err) {
+    S.msg = location.protocol !== 'https:' && location.hostname !== 'localhost'
+      ? 'เบราว์เซอร์ต้องเปิดเว็บผ่าน HTTPS หรือ localhost จึงจะใช้กล้องได้ สามารถเลือกภาพจากคลังภาพแทนได้'
+      : 'ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตการใช้กล้อง หรือเลือกภาพจากคลังภาพแทน';
+    vScan();
+  }
+}
+function stopCamera() {
+  if (activeCameraStream) activeCameraStream.getTracks().forEach(track => track.stop());
+  activeCameraStream = null;
+  const video = $('#liveCamera');
+  if (video) { video.pause(); video.srcObject = null; video.hidden = true; }
+  if ($('#cameraStage')) $('#cameraStage').hidden = false;
+  if ($('#cameraLiveActions')) $('#cameraLiveActions').hidden = true;
+  if (document.querySelector('.camera-actions')) document.querySelector('.camera-actions').hidden = false;
+}
+function captureCamera() {
+  const video = $('#liveCamera');
+  const canvas = $('#cameraCaptureCanvas');
+  if (!video || !video.videoWidth) return;
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  stopCamera();
+  analyzeSkin(canvas);
+}
+
+function pickImage(el) {
+  const f = el.files[0];
+  if (!f) return;
+  const im = new Image();
+  im.onload = () => analyzeSkin(im);
+  im.onerror = () => {
+    S.msg = 'เปิดไฟล์ภาพไม่ได้ ลองเลือกไฟล์ JPG หรือ PNG';
+    vScan();
+  };
+  im.src = URL.createObjectURL(f);
+}
+
+function demoFaceCanvas() {
+  const c = document.createElement('canvas');
+  c.width = 600; c.height = 800;
+  const x = c.getContext('2d');
+  x.fillStyle = '#d9e6e8'; x.fillRect(0, 0, 600, 800);
+  x.fillStyle = '#e7b998'; x.beginPath(); x.ellipse(300, 410, 170, 230, 0, 0, 7); x.fill();
+  x.fillStyle = '#2d2320'; x.beginPath(); x.ellipse(300, 250, 185, 150, 0, Math.PI, 0); x.fill();
+  x.fillStyle = '#fff';
+  [225, 375].forEach(a => { x.beginPath(); x.ellipse(a, 380, 32, 16, 0, 0, 7); x.fill(); });
+  x.fillStyle = '#2d2320';
+  [225, 375].forEach(a => { x.beginPath(); x.arc(a, 380, 10, 0, 7); x.fill(); });
+  x.strokeStyle = '#2d2320'; x.lineWidth = 7;
+  x.beginPath(); x.moveTo(190, 340); x.lineTo(260, 332); x.moveTo(340, 332); x.lineTo(410, 340); x.stroke();
+  return c;
+}
+
+function analyzeSkin(im) {
+  S.busy = true;
+  S.img = im;
+  vScan();
+
+  setTimeout(() => {
+    const keys = Object.keys(CON);
+    const found = keys.filter(() => Math.random() < 0.55);
+    if (found.length < 2) found.push('pores', 'acne');
+
+    const boxes = found.flatMap(k => Array.from({ length: 1 + Math.floor(Math.random() * 3) }, () => ({
+      k, x: 0.3 + Math.random() * 0.34, y: 0.22 + Math.random() * 0.5, w: 0.07 + Math.random() * 0.05
+    })));
+
+    const type = found.includes('oil') ? (found.includes('dryness') ? 'combo' : 'oily') : (found.includes('dryness') ? 'dry' : 'normal');
+    const score = Math.max(50, Math.round(92 - found.length * 5 - boxes.length * 1.5 + Math.random() * 5));
+
+    const th = document.createElement('canvas');
+    th.width = 120; th.height = 160;
+    th.getContext('2d').drawImage(im, 0, 0, 120, 160);
+    const thumbUrl = th.toDataURL('image/jpeg', 0.7);
+
+    const newScanObj = {
+      id: Date.now().toString(),
+      dateStr: 'วันนี้ ' + new Date().toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'}),
+      time: Date.now(),
+      s: score,
+      type,
+      n: found,
+      thumb: thumbUrl
+    };
+
+    S.res = { ...newScanObj, boxes };
+    S.on = new Set(found);
+    S.hist.push(newScanObj);
+    S.busy = false;
+    go('result');
+  }, 1600);
+}
+
+/* ---- RESULT VIEW ---- */
+function vResult() {
+  const R = S.res || S.hist[S.hist.length - 1];
+  if (!R) return go('scan');
+
+  const foundList = R.found || R.n || [];
+
+  app.innerHTML = `
+    <h1>ผลวิเคราะห์สภาพผิวของคุณ</h1>
+    <div class="g2 mt-3">
+      <div>
+        <canvas id="cv" class="shadow-md"></canvas>
+        <p class="mute text-xs mt-2 mb-1">แตะเปิด/ปิด เลเยอร์แสดงตำแหน่งปัญหาผิวบนภาพ:</p>
+        <div class="flex flex-wrap gap-1">
+          ${foundList.map(k => `
+            <button class="chip ${S.on.has(k) ? 'on' : ''}" onclick="toggleMarker('${k}')">
+              <span class="dot" style="background:${CON[k] ? CON[k][1] : '#999'}"></span>${CON[k] ? CON[k][0] : k}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <div class="card highlight">
+          <div class="score">${R.s}<span class="mute text-sm"> / 100</span></div>
+          <p class="font-bold text-lg mt-1">${TYPES[R.type] || R.type}</p>
+          <div class="bar mt-2"><i style="width:${R.s}%"></i></div>
+          <p class="mute text-xs mt-2">ตรวจพบปัญหาหลัก: ${foundList.map(k => CON[k] ? CON[k][0] : k).join(', ')}</p>
+        </div>
+
+        <div class="card">
+          <h3>💡 คำแนะนำการดูแลรักษา</h3>
+          <p class="text-sm mt-1">${getSkinAdvice(R.type)}</p>
+        </div>
+
+        <button class="btn" onclick="go('shop')">🛍️ ดูสกินแคร์ที่เหมาะกับคุณ</button>
+      </div>
+    </div>`;
+}
+
+function getSkinAdvice(type) {
+  const advices = {
+    oily: 'ควรเน้นผลิตภัณฑ์ล้างหน้าเนื้อเจล คุมมัน มี Salicylic Acid และมอยส์เจอไรเซอร์สูตร Light Gel/Water-based',
+    dry: 'ควรใช้โฟมล้างหน้าสูตรอ่อนโยน ไม่ทิ้งความแห้งตึง เสริมเกราะป้องกันผิวด้วย Ceramide และ Hyaluronic Acid',
+    combo: 'เน้นการดูแลแบบผสมผสาน ควบคุมความมันบริเวณ T-Zone และเติมความชุ่มชื้นเข้มข้นบริเวณแก้มที่แห้งกร้าน',
+    normal: 'รักษาสมดุลผิวด้วยการทำความสะอาดอย่างเบามือ มอยส์เจอไรเซอร์สูตรซึมง่าย และทากันแดด SPF50+ ทุกวัน'
+  };
+  return advices[type] || 'ดูแลความสะอาดและเติมความชุ่มชื้นอย่างสม่ำเสมอ';
+}
+
+function toggleMarker(k) {
+  S.on.has(k) ? S.on.delete(k) : S.on.add(k);
+  vResult();
+}
+
+function drawRes() {
+  const cv = $('#cv');
+  if (!cv || !S.img) return;
+  const im = S.img;
+  const iw = im.naturalWidth || im.width;
+  const ih = im.naturalHeight || im.height;
+  const W = cv.clientWidth || 320;
+  const H = Math.round(W * 4 / 3);
+  const dp = window.devicePixelRatio || 1;
+
+  cv.width = W * dp;
+  cv.height = H * dp;
+  cv.style.height = H + 'px';
+
+  const x = cv.getContext('2d');
+  x.scale(dp, dp);
+  const sc = Math.max(W / iw, H / ih);
+  x.drawImage(im, (W - iw * sc) / 2, (H - ih * sc) / 2, iw * sc, ih * sc);
+
+  // Draw Grid Overlay
+  x.strokeStyle = 'rgba(255,255,255,0.2)';
+  x.lineWidth = 1;
+  for (let i = 0; i <= 6; i++) {
+    const gx = W * (0.2 + 0.6 * i / 6);
+    x.beginPath(); x.moveTo(gx, H * 0.1); x.lineTo(gx, H * 0.9); x.stroke();
+  }
+
+  // Draw Bounding Boxes
+  x.font = '600 12px "Noto Sans Thai", sans-serif';
+  S.res.boxes.filter(b => S.on.has(b.k)).forEach(b => {
+    const bw = b.w * W;
+    const bx = b.x * W;
+    const by = b.y * H;
+    const c = CON[b.k][1];
+
+    x.strokeStyle = c;
+    x.lineWidth = 2.5;
+    x.strokeRect(bx, by, bw, bw);
+
+    const t = CON[b.k][0];
+    const tw = x.measureText(t).width + 10;
+    x.fillStyle = c;
+    x.fillRect(bx, by - 20, tw, 20);
+    x.fillStyle = '#fff';
+    x.fillText(t, bx + 5, by - 6);
+  });
+}
+
+/* ---- SHOP VIEW (WITH PRODUCT COMPARE TABLE RETURNED) ---- */
+function matchProduct(p) {
+  const R = S.res || S.hist[S.hist.length - 1];
+  const type = R ? R.type : S.profile.skinType;
+  const con = R ? (R.found || R.n) : [S.profile.concern];
+
+  let s = p.types.includes(type) ? 60 : 20;
+  const hit = p.tags.filter(t => con.includes(t));
+  s += hit.length * 12;
+  return { s: Math.min(99, s), hit, ok: p.types.includes(type), type };
+}
+
+function vShop() {
+  const cats = ['ทั้งหมด', 'โฟมล้างหน้า', 'สกินแคร์', 'กันแดด'];
+  let L = PRODUCTS.filter(p => S.cat === 'ทั้งหมด' || p.c === S.cat).map(p => ({ p, m: matchProduct(p) }));
+  L.sort((a, b) => S.sort === 'match' ? b.m.s - a.m.s : a.p.p - b.p.p);
+
+  app.innerHTML = `
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+      <h1>🛍️ สกินแคร์แนะนำสำหรับคุณ</h1>
+      ${S.isAdmin ? `<button class="btn sm danger" onclick="addNewProductAdmin()">➕ Admin: เพิ่มสินค้าใหม่</button>` : ''}
+    </div>
+    
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div>
+        ${cats.map(c => `<button class="chip ${S.cat === c ? 'on' : ''}" onclick="S.cat='${c}';vShop()">${c}</button>`).join('')}
+      </div>
+
+      <div class="flex gap-2">
+        <select class="!min-h-[36px] !mb-0 !py-1 text-xs" onchange="S.sort=this.value;vShop()">
+          <option value="match" ${S.sort==='match'?'selected':''}>เรียงตามความเหมาะสม</option>
+          <option value="price" ${S.sort==='price'?'selected':''}>เรียงตามราคาต่ำสุด</option>
+        </select>
+
+      </div>
+    </div>
+
+    ${S.showCmpTable && S.cmp.size >= 2 ? renderCompareTable() : ''}
+
+    <div class="pg">
+      ${L.map(({ p, m }, idx) => {
+        // Check Allergy match
+        const allergyHit = p.ing.filter(i => S.profile.allergies.some(a => i.toLowerCase().includes(a.toLowerCase())));
+        const isAllergic = allergyHit.length > 0;
+
+        return `
+          <div class="card prod-card ${isAllergic ? 'border-red-400 bg-red-50/20' : (idx === 0 ? 'highlight' : '')}">
+            <div class="flex justify-between items-start mb-2">
+              ${isAllergic ? `
+                <span class="badge badge-allergy">⚠️ มีส่วนผสมที่แพ้ (${allergyHit.join(', ')})</span>
+              ` : (idx === 0 ? `<span class="badge badge-top">⭐ แนะนำ</span>` : `<span></span>`)}
+              
+              <span class="text-xs font-bold text-[var(--brand)] bg-color-mix(in srgb, var(--brand) 10%, transparent) px-2 py-0.5 rounded-lg">Match ${m.s}%</span>
+            </div>
+            
+            <img src="${p.img}" class="prod-img" alt="${p.t}" onerror="this.src='https://placehold.co/400x300/12727a/ffffff?text=SkinCare'">
+            
+            <h3 class="text-base truncate">${p.t}</h3>
+            <div class="mute text-xs mb-2">${p.b} · ${p.ml} ml · <b class="text-[var(--ink)]">฿${p.p}</b></div>
+
+            <p class="text-xs mb-1">
+              ${m.ok ? `✓ เหมาะกับ${TYPES[m.type]}ของคุณ` : `ไม่ใช่สูตรหลักของผิวมัน`}
+              ${m.hit.length ? ` · ช่วยเรื่อง${m.hit.map(h => CON[h][0]).join(', ')}` : ''}
+            </p>
+
+            <p class="mute text-xs mb-3">ส่วนผสม: ${p.ing.join(', ')}</p>
+
+            <div class="product-actions">
+              <button class="btn sm store-action" onclick="buyProduct(${p.id})">ไปที่ร้านค้า</button>
+              <button class="btn alt sm compare-action" title="เพิ่ม/นำออกจากรายการเปรียบเทียบ" aria-label="เปรียบเทียบสินค้า" onclick="toggleCompare(${p.id})">${S.cmp.has(p.id) ? '✓ เทียบ' : '+ เทียบ'}</button>
+              <button class="favorite-icon ${S.favs.has(p.id) ? 'is-fav' : ''}" title="รายการโปรด" aria-label="รายการโปรด" onclick="toggleFav(${p.id})">${S.favs.has(p.id) ? '♥' : '♡'}</button>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+    ${S.cmp.size ? `<div class="compare-float-wrap"><button class="compare-float" onclick="S.showCmpTable=!S.showCmpTable;vShop()">${S.showCmpTable ? 'ซ่อนตารางเปรียบเทียบ' : '⚖️ เปรียบเทียบสินค้า'} <span>${S.cmp.size}/4</span></button></div>` : ''}`;
+}
+
+function toggleCompare(id) {
+  if (S.cmp.has(id)) S.cmp.delete(id);
+  else if (S.cmp.size < 4) S.cmp.add(id);
+  vShop();
+}
+
+function renderCompareTable() {
+  const P = [...S.cmp].map(i => PRODUCTS.find(p => p.id === i));
+  const row = (label, fn) => `<tr><th>${label}</th>${P.map(p => `<td>${fn(p)}</td>`).join('')}</tr>`;
+
+  return `
+    <div class="card tbl mb-4 border-2 border-[var(--brand)]">
+      <h3 class="mb-2">ตารางเปรียบเทียบสินค้าที่เลือก (${P.length} รายการ)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>รายละเอียด</th>
+            ${P.map(p => `<th>${p.t}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${row('แบรนด์', p => p.b)}
+          ${row('ราคา', p => '฿' + p.p)}
+          ${row('ปริมาณ', p => p.ml + ' ml')}
+          ${row('เฉลี่ย ฿/ml', p => (p.p / p.ml).toFixed(2))}
+          ${row('ส่วนผสมหลัก', p => p.ing.join(', '))}
+          ${row('ความเข้ากัน', p => matchProduct(p).s + '%')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function toggleFav(id) {
+  S.favs.has(id) ? S.favs.delete(id) : S.favs.add(id);
+  vShop();
+}
+
+function buyProduct(id) {
+  const p = PRODUCTS.find(x => x.id === id);
+  if (!p) return;
+  S.purchaseCounts[id] = (S.purchaseCounts[id] || 0) + 1;
+  if (S.purchaseCounts[id] >= 2) S.myCabinet.add(id);
+  if (p.url) window.open(p.url, '_blank', 'noopener');
+}
+
+function addNewProductAdmin() {
+  const title = prompt('ชื่อสินค้า:');
+  if (!title) return;
+  const brand = prompt('แบรนด์:', 'Brand');
+  const price = +prompt('ราคา (บาท):', '590');
+  const ml = +prompt('ปริมาตร (ml):', '50');
+  const url = prompt('ลิงก์ร้านค้า:', 'https://shopee.co.th');
+
+  const newId = PRODUCTS.length + 1;
+  PRODUCTS.push({
+    id: newId,
+    t: title,
+    b: brand || 'แบรนด์ใหม่',
+    c: 'สกินแคร์',
+    p: price || 390,
+    ml: ml || 50,
+    types: ['oily', 'dry', 'combo', 'normal'],
+    tags: ['acne', 'pores'],
+    ing: ['Water', 'Glycerin'],
+    img: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&q=80',
+    url: url || 'https://shopee.co.th'
+  });
+  alert('เพิ่มสินค้าเรียบร้อยแล้ว!');
+  vShop();
+}
+
+/* ---- CHECK SHOULD I BUY THIS ---- */
+function vCheck() {
+  const cp = S.checkProd;
+  app.innerHTML = `
+    <h1>🔍 ซื้อดีไหม? (Should I Buy?)</h1>
+    <p class="mute mb-4 text-xs">ให้ AI ตรวจสอบส่วนผสมสกินแคร์ที่คุณสนใจ เทียบกับสารแพ้ของคุณและการใช้งานร่วมกับรูทีนเดิม</p>
+
+    <div class="g2">
+      <div class="card">
+        <h3 class="mb-3">กรอกข้อมูลสกินแคร์ที่สนใจ</h3>
+        <label class="text-xs mute block mb-1">ชื่อสกินแคร์ / แบรนด์</label>
+        <input id="cpTitle" placeholder="เช่น เซรั่ม Niacinamide 10%" value="${cp.title}">
+        
+        <label class="text-xs mute block mb-1">หมวดหมู่</label>
+        <select id="cpCat">
+          <option value="สกินแคร์">สกินแคร์ / เซรั่ม / ครีม</option>
+          <option value="โฟมล้างหน้า">โฟมล้างหน้า / คลีนซิ่ง</option>
+          <option value="กันแดด">ครีมกันแดด</option>
+        </select>
+
+        <label class="text-xs mute block mb-1">ส่วนผสมหลัก (คั่นด้วยเครื่องหมายจุลภาค ,)</label>
+        <textarea id="cpIng" rows="3" placeholder="เช่น Niacinamide, Alcohol, Fragrance, Salicylic Acid">${cp.ingredients}</textarea>
+
+        <button class="btn" onclick="runProductCheck()">🧪 วิเคราะห์ความคุ้มค่าและความปลอดภัย</button>
+      </div>
+
+      <div>
+        ${cp.result ? renderCheckResult(cp.result) : `
+          <div class="card text-center py-10 mute">
+            <div class="text-4xl mb-2">💡</div>
+            <p class="text-sm">กรอกข้อมูลสกินแคร์ทางซ้ายมือ แล้วกดวิเคราะห์ได้เลย</p>
+          </div>
+        `}
+      </div>
+    </div>`;
+}
+
+function runProductCheck() {
+  const title = $('#cpTitle').value.trim() || 'สกินแคร์ที่สนใจ';
+  const cat = $('#cpCat').value;
+  const ingStr = $('#cpIng').value.trim();
+  const ingList = ingStr.split(',').map(s => s.trim()).filter(Boolean);
+
+  S.checkProd.title = title;
+  S.checkProd.ingredients = ingStr;
+
+  const userSkin = (S.res ? S.res.type : S.profile.skinType);
+  const userAllergies = S.profile.allergies;
+  const hitAllergies = ingList.filter(i => userAllergies.some(a => i.toLowerCase().includes(a.toLowerCase())));
+
+  let score = 70;
+  if (hitAllergies.length > 0) score -= 50;
+  if (ingList.some(i => i.toLowerCase().includes('niacinamide') || i.toLowerCase().includes('ceramide'))) score += 15;
+  if (userSkin === 'oily' && ingList.some(i => i.toLowerCase().includes('oil'))) score -= 15;
+
+  score = Math.max(10, Math.min(99, score));
+  const shouldBuy = score >= 65 && hitAllergies.length === 0;
+
+  S.checkProd.result = { title, cat, score, shouldBuy, hitAllergies, ingList };
+  vCheck();
+}
+
+function renderCheckResult(r) {
+  return `
+    <div class="card ${r.shouldBuy ? 'border-green-500 bg-green-50 dark:bg-green-950/20' : 'border-red-500 bg-red-50 dark:bg-red-950/20'}">
+      <div class="flex items-center justify-between mb-2">
+        <span class="badge ${r.shouldBuy ? 'badge-best' : 'bg-red-500 text-white'}">${r.shouldBuy ? '✅ คำแนะนำ: ควรซื้อ' : '❌ คำแนะนำ: ไม่แนะนำให้ซื้อ'}</span>
+        <span class="font-bold text-base">ความเข้ากัน: ${r.score}%</span>
+      </div>
+      
+      <h2 class="mt-2">${r.title}</h2>
+      
+      ${r.hitAllergies.length > 0 ? `
+        <div class="p-3 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded-lg text-xs mt-3 font-medium">
+          ⚠️ ตรวจพบส่วนผสมที่คุณแพ้: ${r.hitAllergies.join(', ')}
+        </div>
+      ` : `
+        <div class="text-xs text-green-700 dark:text-green-300 mt-2">✓ ไม่พบสารแพ้ตามประวัติของคุณ</div>
+      `}
+    </div>`;
+}
+
+/* ---- SHELF PRICE COMPARISON (WITH PROMOTIONS & PLACEHOLDERS) ---- */
+function vShelf() {
+  const sc = S.shelfComp;
+  app.innerHTML = `
+    <h1>🏷️ เทียบราคา (Shelf Price Calculator)</h1>
+    <p class="mute mb-4 text-xs">เปรียบเทียบราคาต่อปริมาตร (บาท/ml) พร้อมคำนวณส่วนลดโปรโมชัน เพื่อเลือกซื้อสินค้าที่คุ้มที่สุด</p>
+
+    <div class="promo-examples card max-w-2xl mx-auto">
+      <h3 class="mb-2">ตัวอย่างโปรโมชันที่นำมาเปรียบเทียบได้</h3>
+      <div class="promo-example-grid">
+        <div class="promo-example"><b>🎁 1 แถม 1</b><span>จ่ายราคาเดิม แต่ได้รับ 2 ชิ้น</span></div>
+        <div class="promo-example"><b>🏷️ ลด 20%</b><span>หักส่วนลดจากราคาเต็ม</span></div>
+        <div class="promo-example"><b>💸 ลด 50 บาท</b><span>หักส่วนลดเป็นจำนวนเงิน</span></div>
+      </div>
+      <p class="mute text-xs mt-2">เลือกประเภทโปรโมชันในแต่ละตัวเลือกด้านล่างเพื่อให้ระบบคำนวณราคาเฉลี่ยใหม่</p>
+    </div>
+
+    <div class="card max-w-2xl mx-auto">
+      <div class="flex items-center justify-between mb-4">
+        <label class="text-sm font-semibold">เลือกจำนวนตัวเลือกที่จะเทียบ:</label>
+        <select class="!w-28 !mb-0 text-xs" onchange="updateShelfCount(this.value)">
+          <option value="2" ${sc.count==2?'selected':''}>2 รายการ</option>
+          <option value="3" ${sc.count==3?'selected':''}>3 รายการ</option>
+          <option value="4" ${sc.count==4?'selected':''}>4 รายการ</option>
+        </select>
+      </div>
+
+      <div class="space-y-4 mb-4">
+        ${sc.items.slice(0, sc.count).map((item, idx) => `
+          <div class="p-3 border border-[var(--line)] rounded-xl bg-[var(--sf)] space-y-2">
+            <div class="font-semibold text-xs text-[var(--brand)]">ตัวเลือกที่ ${idx+1}</div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div>
+                <label class="text-[11px] mute block">ชื่อสินค้า / ขนาด</label>
+                <input placeholder="ตัวอย่าง: ขวดเล็ก 50ml" value="${item.name}" onchange="S.shelfComp.items[${idx}].name=this.value">
+              </div>
+              <div>
+                <label class="text-[11px] mute block">ราคาเต็ม (บาท)</label>
+                <input type="number" placeholder="ตัวอย่าง: 350" value="${item.price}" onchange="S.shelfComp.items[${idx}].price=+this.value">
+              </div>
+              <div>
+                <label class="text-[11px] mute block">ปริมาตร (ml / กรัม)</label>
+                <input type="number" placeholder="ตัวอย่าง: 50" value="${item.volume}" onchange="S.shelfComp.items[${idx}].volume=+this.value">
+              </div>
+            </div>
+
+            <!-- PROMOTION SELECTION -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1 border-t border-[var(--line)]">
+              <div>
+                <label class="text-[11px] mute block">โปรโมชันหน้าร้าน</label>
+                <select class="!mb-0 text-xs" onchange="S.shelfComp.items[${idx}].promo=this.value;vShelf()">
+                  <option value="none" ${item.promo==='none'?'selected':''}>ไม่มีโปรโมชัน</option>
+                  <option value="buy1get1" ${item.promo==='buy1get1'?'selected':''}>1 แถม 1 (ได้ปริมาตร 2 เท่า)</option>
+                  <option value="percent" ${item.promo==='percent'?'selected':''}>ส่วนลดเป็น %</option>
+                  <option value="fixed" ${item.promo==='fixed'?'selected':''}>ลดเป็นจำนวนเงิน (บาท)</option>
+                </select>
+              </div>
+              ${['percent','fixed'].includes(item.promo) ? `
+                <div>
+                  <label class="text-[11px] mute block">${item.promo === 'percent' ? 'เปอร์เซ็นต์ส่วนลด (%)' : 'ส่วนลด (บาท)'}</label>
+                  <input type="number" min="0" placeholder="${item.promo === 'percent' ? 'ตัวอย่าง: 20' : 'ตัวอย่าง: 50'}" value="${item.promoVal||0}" onchange="S.shelfComp.items[${idx}].promoVal=+this.value">
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <button class="btn" onclick="calculateShelfBest()">⚡ คำนวณหาตัวเลือกที่คุ้มค่าที่สุด</button>
+    </div>
+
+    ${sc.result ? renderShelfResult(sc.result) : ''}`;
+}
+
+function updateShelfCount(val) {
+  S.shelfComp.count = +val;
+  while (S.shelfComp.items.length < S.shelfComp.count) {
+    const idx = S.shelfComp.items.length + 1;
+    S.shelfComp.items.push({ name: `ตัวเลือก ${idx}`, price: 400, volume: 50, promo: 'none', promoVal: 0 });
+  }
+  vShelf();
+}
+
+function calculateShelfBest() {
+  const items = S.shelfComp.items.slice(0, S.shelfComp.count).map(i => {
+    const name = i.name.trim() || 'สินค้า';
+    let price = Number(i.price) || 0;
+    let vol = Number(i.volume) || 1;
+
+    // Apply Promo Calculations
+    if (i.promo === 'buy1get1') {
+      vol = vol * 2; // Doubled volume for same price
+    } else if (i.promo === 'percent' && i.promoVal > 0) {
+      price = price * (1 - Math.min(i.promoVal, 100) / 100);
+    } else if (i.promo === 'fixed' && i.promoVal > 0) {
+      price = Math.max(0, price - i.promoVal);
+    }
+
+    const unitPrice = price / vol;
+    return { name, rawPrice: i.price, rawVol: i.volume, finalPrice: price, finalVol: vol, promo: i.promo, unitPrice };
+  });
+
+  items.sort((a, b) => a.unitPrice - b.unitPrice);
+  S.shelfComp.result = items;
+  vShelf();
+}
+
+function renderShelfResult(items) {
+  const best = items[0];
+  return `
+    <div class="card max-w-2xl mx-auto mt-4 border-2 border-[var(--good)]">
+      <div class="flex items-center justify-between mb-3">
+        <span class="badge badge-best">🏆 ตัวเลือกที่คุ้มค่าที่สุด</span>
+        <span class="text-xs mute">เฉลี่ย ฿${best.unitPrice.toFixed(2)} / ml</span>
+      </div>
+      
+      <h2 class="text-xl text-[var(--good)]">${best.name}</h2>
+      <p class="text-xs mt-1">สุทธิ ฿${best.finalPrice.toFixed(0)} / ปริมาตรสุทธิ ${best.finalVol} ml</p>
+
+      <div class="mt-4 tbl">
+        <table>
+          <thead>
+            <tr>
+              <th>อันดับ</th>
+              <th>ชื่อสินค้า</th>
+              <th>จ่ายจริง</th>
+              <th>ได้รับรวม</th>
+              <th>เฉลี่ยต่อ ml</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map((it, index) => `
+              <tr class="${index === 0 ? 'font-bold bg-green-50 dark:bg-green-950/30' : ''}">
+                <td>${index === 0 ? '🥇 คุ้มสุด' : '#' + (index + 1)}</td>
+                <td>${it.name}</td>
+                <td>฿${it.finalPrice.toFixed(0)}</td>
+                <td>${it.finalVol} ml</td>
+                <td>฿${it.unitPrice.toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+/* ---- HISTORY & MODAL PHOTO OPTIONS ---- */
+function vHist() {
+  const now = Date.now();
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+  const recentScans = S.hist.filter(h => (now - h.time) <= thirtyDaysMs);
+  
+  const firstScan = S.hist[0];
+  const baselineScan = S.hist.find(h => h.id === S.baselineScanId) || firstScan;
+  const currentScan = S.hist[S.hist.length - 1];
+
+  app.innerHTML = `
+    <h1>📊 ประวัติวิเคราะห์ & ภาพผิว</h1>
+    <p class="mute mb-4 text-xs">เปรียบเทียบพัฒนาการผิว และเรียกดูคลังภาพย้อนหลัง</p>
+
+    <!-- 3-Photo Comparison -->
+    <div class="card mb-4">
+      <h3 class="mb-3">📷 เปรียบเทียบภาพผิว 3 ระยะ</h3>
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-center">
+        <div class="p-2 border border-[var(--line)] rounded-xl">
+          <span class="badge mb-2 bg-slate-500 text-white">1. สแกนครั้งแรก</span>
+          ${firstScan.thumb ? `<img src="${firstScan.thumb}" class="w-full max-w-[120px] aspect-[3/4] object-cover rounded-lg mx-auto">` : `<div class="w-full max-w-[120px] aspect-[3/4] bg-[var(--line)] rounded-lg mx-auto flex items-center justify-center text-xs">ไม่มีรูป</div>`}
+          <div class="font-bold text-lg mt-1">${firstScan.s} คะแนน</div>
+          <div class="text-[11px] mute">${firstScan.dateStr}</div>
+        </div>
+
+        <div class="p-2 border-2 border-[var(--brand)] rounded-xl bg-color-mix(in srgb, var(--brand) 5%, transparent)">
+          <span class="badge badge-top mb-2">2. รูปเปรียบเทียบหลัก</span>
+          ${baselineScan.thumb ? `<img src="${baselineScan.thumb}" class="w-full max-w-[120px] aspect-[3/4] object-cover rounded-lg mx-auto">` : `<div class="w-full max-w-[120px] aspect-[3/4] bg-[var(--line)] rounded-lg mx-auto flex items-center justify-center text-xs">ไม่มีรูป</div>`}
+          <div class="font-bold text-lg mt-1 text-[var(--brand)]">${baselineScan.s} คะแนน</div>
+          <div class="text-[11px] mute">${baselineScan.dateStr}</div>
+        </div>
+
+        <div class="p-2 border border-[var(--line)] rounded-xl">
+          <span class="badge badge-best mb-2">3. รูปปัจจุบัน</span>
+          ${currentScan.thumb ? `<img src="${currentScan.thumb}" class="w-full max-w-[120px] aspect-[3/4] object-cover rounded-lg mx-auto">` : `<div class="w-full max-w-[120px] aspect-[3/4] bg-[var(--line)] rounded-lg mx-auto flex items-center justify-center text-xs">ไม่มีรูป</div>`}
+          <div class="font-bold text-lg mt-1">${currentScan.s} คะแนน</div>
+          <div class="text-[11px] mute">${currentScan.dateStr}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timeline Photos list within 30 days -->
+    <div class="card">
+      <h3 class="mb-3">🗓️ ภาพสแกนในรอบ 30 วัน (คลิกที่รูปภาพเพื่อเลือกการทำงาน)</h3>
+      <div class="space-y-2">
+        ${recentScans.map(h => `
+          <div class="flex items-center justify-between p-2 border-b border-[var(--line)] cursor-pointer hover:bg-color-mix(in srgb, var(--brand) 5%, transparent) rounded-lg" onclick="openPhotoModal('${h.id}')">
+            <div class="flex items-center gap-3">
+              ${h.thumb ? `<img src="${h.thumb}" class="w-12 h-16 object-cover rounded">` : `<div class="w-12 h-16 bg-[var(--line)] rounded"></div>`}
+              <div>
+                <div class="font-semibold text-sm">${h.dateStr} · ${TYPES[h.type]}</div>
+                <div class="text-xs mute">ปัญหาผิว: ${h.n.map(k => CON[k]?CON[k][0]:k).join(', ')}</div>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="font-bold text-base text-[var(--brand)]">${h.s} คะแนน</span>
+              <div class="text-[11px] mute">แตะเพื่อเปิดเมนู</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+/* Modal photo click options */
+function openPhotoModal(id) {
+  const scan = S.hist.find(h => h.id === id);
+  if (!scan) return;
+
+  const html = `
+    <div class="text-center">
+      <h3 class="mb-1">ตัวเลือกรูปภาพ (${scan.dateStr})</h3>
+      <p class="mute text-xs mb-4">คะแนนผิว: ${scan.s} · ${TYPES[scan.type]}</p>
+      
+      ${scan.thumb ? `<img src="${scan.thumb}" class="w-44 aspect-[3/4] object-cover rounded-xl mx-auto mb-4 border border-[var(--line)]">` : ''}
+
+      <div class="space-y-2">
+        <button class="btn" onclick="setAsBaseline('${scan.id}');closeModal();vHist()">📌 1. ตั้งเป็นรูปเปรียบเทียบ</button>
+        <button class="btn alt" onclick="viewPhotoFull('${scan.id}')">🔍 2. ดูรูปภาพขนาดใหญ่</button>
+      </div>
+    </div>`;
+  openModal(html);
+}
+
+function setAsBaseline(id) {
+  S.baselineScanId = id;
+  alert('ตั้งค่าเป็นรูปเปรียบเทียบหลักเรียบร้อยแล้ว');
+}
+
+function viewPhotoFull(id) {
+  const scan = S.hist.find(h => h.id === id);
+  const html = `
+    <div class="text-center">
+      <h3 class="mb-2">ภาพสแกนผิว (${scan.dateStr})</h3>
+      ${scan.thumb ? `<img src="${scan.thumb}" class="w-full rounded-xl mx-auto mb-3">` : '<p class="mute">ไม่มีภาพตัวอย่าง</p>'}
+      <button class="btn alt sm" onclick="closeModal()">ปิด</button>
+    </div>`;
+  openModal(html);
+}
+
+// Initial render
+render();
+</script>
+</body>
+</html>
